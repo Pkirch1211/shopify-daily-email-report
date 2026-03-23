@@ -1,0 +1,14 @@
+{
+  "name": "shopify-sales-reporter-actions",
+  "version": "1.0.0",
+  "description": "GitHub Actions scheduler for Shopify sales reports",
+  "main": "send-report.js",
+  "scripts": {
+    "send:all": "node send-report.js --schedule all",
+    "send:dtc": "node send-report.js --schedule dtc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "nodemailer": "^6.9.0"
+  }
+}
