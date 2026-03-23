@@ -2,7 +2,7 @@ name: Daily Sales Report
 
 on:
   schedule:
-    # 08:30 UTC = 03:30 EST (UTC-8) — runs every day
+    # 08:30 UTC = 03:30 EST (UTC-5) — runs every day
     - cron: '30 8 * * *'
   # Allow manual trigger from GitHub Actions UI
   workflow_dispatch:
@@ -29,7 +29,6 @@ jobs:
   send-all-stores:
     name: All Stores Report
     runs-on: ubuntu-latest
-    # Only run on schedule (not manual dispatch, unless explicitly chosen)
     if: github.event_name == 'schedule' || github.event.inputs.schedule == 'all'
     steps:
       - name: Checkout
@@ -39,7 +38,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -70,7 +68,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
