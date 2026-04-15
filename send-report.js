@@ -569,7 +569,7 @@ function buildMergedProductsSection(products) {
                   <td style="padding:0 0 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;"></td>
                   <td style="padding:0 10px 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;">Product</td>
                   <td style="padding:0 8px 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Yesterday</td>
-                  <td style="padding:0 0 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Year to Date</td>
+                  <td style="padding:0 0 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">YTD</td>
                 </tr>
                 ${rows}
               </table>
