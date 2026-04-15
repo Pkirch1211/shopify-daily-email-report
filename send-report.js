@@ -292,7 +292,7 @@ function aggregateProducts(orders) {
   return map;
 }
 
-function mergeProductWindows(yesterdayMap, ytdMap, limit = 18) {
+function mergeProductWindows(yesterdayMap, ytdMap, limit = 20) {
   const keys = new Set([...yesterdayMap.keys(), ...ytdMap.keys()]);
   const merged = [];
 
@@ -537,40 +537,47 @@ function buildMergedProductsSection(products) {
 
   const rows = products.map((p, i) => `
     <tr>
-      <td style="padding:10px 0;border-bottom:1px solid ${COLORS.border};width:22px;color:${COLORS.textMuted};font-size:11px;vertical-align:top;">
+      <td style="padding:12px 0;border-bottom:1px solid #efe7df;width:24px;color:#b29a8a;font-size:12px;vertical-align:top;">
         ${i + 1}
       </td>
-      <td style="padding:10px 8px 10px 0;border-bottom:1px solid ${COLORS.border};vertical-align:top;">
-        <div style="color:${COLORS.brandInk};font-size:13px;font-weight:700;line-height:1.4;">${p.name}</div>
-        ${p.variant ? `<div style="color:${COLORS.textMuted};font-size:11px;line-height:1.4;margin-top:2px;">${p.variant}</div>` : ''}
+      <td style="padding:12px 10px 12px 0;border-bottom:1px solid #efe7df;vertical-align:top;">
+        <div style="color:#2f2a27;font-size:13px;font-weight:600;line-height:1.45;">${p.name}</div>
+        ${p.variant ? `<div style="color:#9b8b80;font-size:11px;line-height:1.4;margin-top:2px;">${p.variant}</div>` : ''}
       </td>
-      <td style="padding:10px 0 10px 8px;border-bottom:1px solid ${COLORS.border};text-align:right;vertical-align:top;white-space:nowrap;">
-        <div style="color:${COLORS.textSoft};font-size:11px;line-height:1.35;">${fmtN(Math.round(p.yesterdayQty))} units</div>
-        <div style="color:${COLORS.brandDark};font-size:12px;font-weight:700;line-height:1.35;">${fmt0(p.yesterdayRevenue)}</div>
+      <td style="padding:12px 8px;border-bottom:1px solid #efe7df;text-align:right;vertical-align:top;white-space:nowrap;">
+        <div style="color:#7b6d64;font-size:12px;line-height:1.4;">${fmtN(Math.round(p.yesterdayQty))} units</div>
+        <div style="color:#7a5c49;font-size:12px;font-weight:700;line-height:1.4;">${fmt0(p.yesterdayRevenue)}</div>
       </td>
-    </tr>
-    <tr>
-      <td style="padding:0 0 10px 0;"></td>
-      <td colspan="2" style="padding:0 0 10px 0;border-bottom:1px solid ${COLORS.borderLight || COLORS.border};">
-        <div style="color:${COLORS.textSoft};font-size:10px;letter-spacing:1.3px;text-transform:uppercase;font-weight:700;margin-bottom:2px;">Year to Date</div>
-        <div style="color:${COLORS.textSoft};font-size:11px;line-height:1.35;">${fmtN(Math.round(p.ytdQty))} units</div>
-        <div style="color:${COLORS.brandInk};font-size:12px;font-weight:700;line-height:1.35;">${fmt0(p.ytdRevenue)}</div>
+      <td style="padding:12px 0 12px 8px;border-bottom:1px solid #efe7df;text-align:right;vertical-align:top;white-space:nowrap;">
+        <div style="color:#7b6d64;font-size:12px;line-height:1.4;">${fmtN(Math.round(p.ytdQty))} units</div>
+        <div style="color:#7a5c49;font-size:12px;font-weight:700;line-height:1.4;">${fmt0(p.ytdRevenue)}</div>
       </td>
     </tr>
   `).join('');
 
   return `
-    ${buildSectionHeader(3, 'Product Performance', 'Yesterday first, with year-to-date context below each item')}
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.cardBg};border-left:1px solid ${COLORS.border};border-right:1px solid ${COLORS.border};border-bottom:1px solid ${COLORS.border};margin:0 0 18px 0;">
-      <tr>
-        <td style="padding:14px;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            ${rows}
-          </table>
-        </td>
-      </tr>
-    </table>
-  `;
+    <tr>
+      <td colspan="3">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #eadfd6;border-radius:18px;">
+          <tr>
+            <td style="padding:16px 18px;">
+              <div style="color:#a07f6a;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:10px;">
+                Product Performance
+              </div>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:0 0 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;"></td>
+                  <td style="padding:0 10px 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;">Product</td>
+                  <td style="padding:0 8px 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Yesterday</td>
+                  <td style="padding:0 0 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Year to Date</td>
+                </tr>
+                ${rows}
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
 }
 
 function buildStoreSection(data, stepBase = 1) {
