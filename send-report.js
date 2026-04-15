@@ -359,13 +359,13 @@ async function generateBlurb(dataArr) {
 
     const summary = dataArr.map(d => {
       const revChg = d.comparison.revenue
-        ? (((d.revenue.total - d.comparison.revenue) / d.comparison.revenue) * 100).toFixed(1)
+        ? (((d.revenue.total - d.comparison.revenue) / d.comparison.revenue) * 100).toFixed(0)
         : null;
 
       const topYesterday = d.productsMerged.find(p => p.yesterdayRevenue > 0);
       const topYtd = [...d.productsMerged].sort((a, b) => b.ytdRevenue - a.ytdRevenue)[0];
 
-      return `${d.storeName}: $${d.revenue.total.toFixed(2)} revenue, ${d.revenue.orders} orders, AOV $${d.revenue.aov.toFixed(2)}${revChg ? `, ${revChg}% vs prior period` : ''}. Top yesterday product: ${topYesterday?.name || 'N/A'}. Top YTD product: ${topYtd?.name || 'N/A'}.`;
+      return `${d.storeName}: $${d.revenue.total.toFixed(2)} revenue, ${d.revenue.orders} orders, AOV $${d.revenue.aov.toFixed(2)}${revChg ? `, ${revChg}% vs prior` : ''}. Top yesterday product: ${topYesterday?.name || 'N/A'}. Top YTD product: ${topYtd?.name || 'N/A'}.`;
     }).join(' ');
 
     const msg = await client.messages.create({
@@ -398,11 +398,11 @@ function fmtN(n) {
 }
 
 function pct(a, b) {
-  return !b ? null : (((a - b) / b) * 100).toFixed(1);
+  return !b ? null : (((a - b) / b) * 100).toFixed(0);
 }
 
 function arrowHTML(v) {
-  if (v === null) return '<span style="color:#a8a29e;">No prior period</span>';
+  if (v === null) return '<span style="color:#a8a29e;">No prior</span>';
   return parseFloat(v) >= 0
     ? `<span style="color:#3f7a5d;font-weight:700;">▲ ${v}%</span>`
     : `<span style="color:#b26a3c;font-weight:700;">▼ ${Math.abs(v)}%</span>`;
@@ -421,7 +421,7 @@ function buildMetricCard(label, value, change) {
               ${value}
             </div>
             <div style="font-size:12px;line-height:1.45;margin-top:8px;color:#7c6f67;">
-              ${arrowHTML(change)} <span style="color:#a1958d;">vs prior period</span>
+              ${arrowHTML(change)} <span style="color:#a1958d;">vs prior</span>
             </div>
           </td>
         </tr>
