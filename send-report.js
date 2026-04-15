@@ -31,7 +31,7 @@ const EMAIL = {
   port: 587,
   user: process.env.GMAIL_USER,
   pass: process.env.GMAIL_PASS,
-  from: process.env.GMAIL_FROM || process.env.GMAIL_USER,
+  from: process.env.GMAIL_FROM || 'Lifelines Reports',
 };
 
 const SCHEDULE_CONFIG = {
@@ -697,7 +697,7 @@ async function sendEmail(recipients, html, storeNames) {
   });
 
   await transporter.sendMail({
-    from: EMAIL.from || EMAIL.user,
+    from: `"${EMAIL.from}" <${EMAIL.user}>`,
     to: recipients.join(', '),
     subject: `📊 Sales Report — ${storeNames}`,
     html,
