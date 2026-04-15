@@ -48,6 +48,26 @@ const SCHEDULE_CONFIG = {
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const DATE_RANGE = process.env.DATE_RANGE || 'yesterday'; // yesterday | 7days | 30days | today
 
+// ── Brand / UI colors ─────────────────────────────────────────────────────────
+const COLORS = {
+  pageBg: '#ECEDE3',
+  panelBg: '#F6F6F1',
+  cardBg: '#FBFBF7',
+  headerBg: '#D7D8D2',
+  border: '#C8CCBD',
+  borderDark: '#94A08E',
+  text: '#424A42',
+  textSoft: '#7E857A',
+  textMuted: '#9AA093',
+  brand: '#6A7C69',
+  brandDark: '#556654',
+  brandInk: '#374338',
+  positive: '#2F7D57',
+  negative: '#C2413B',
+  warning: '#C56B2C',
+  white: '#FFFFFF',
+};
+
 // ── Time / date helpers (Eastern Time, consistent windows) ───────────────────
 function getEasternTodayKey() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -79,7 +99,6 @@ function diffDaysInclusive(startKey, endKey) {
 }
 
 function easternOffsetForDay(dayKey) {
-  // Use noon UTC on the target day to determine the ET offset for that calendar day.
   const probe = new Date(dayKeyToUtcNoonMs(dayKey));
   const tzPart = new Intl.DateTimeFormat('en-US', {
     timeZone: STORE_TZ,
@@ -402,49 +421,115 @@ function pct(a, b) {
 }
 
 function arrowHTML(v) {
-  if (v === null) return '<span style="color:#a8a29e;">No prior</span>';
+  if (v === null) return `<span style="color:${COLORS.textMuted};">No prior</span>`;
   return parseFloat(v) >= 0
-    ? `<span style="color:#3f7a5d;font-weight:700;">▲ ${v}%</span>`
-    : `<span style="color:#b26a3c;font-weight:700;">▼ ${Math.abs(v)}%</span>`;
+    ? `<span style="color:${COLORS.positive};font-weight:700;">▲ ${v}%</span>`
+    : `<span style="color:${COLORS.negative};font-weight:700;">▼ ${Math.abs(v)}%</span>`;
 }
 
-function buildMetricCard(label, value, change) {
+function buildMetricCell(label, value, change, valueColor) {
   return `
-    <td width="33.33%" style="padding:0 6px 12px 6px;vertical-align:top;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffdf9;border:1px solid #eadfd6;border-radius:18px;">
+    <tr>
+      <td style="border:1px solid ${COLORS.border};background:${COLORS.cardBg};padding:0;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding:12px 14px 6px 14px;">
+              <div style="color:${COLORS.textSoft};font-size:10px;line-height:1.2;letter-spacing:1.8px;text-transform:uppercase;font-weight:700;">
+                ${label}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 14px 4px 14px;">
+              <div style="color:${valueColor};font-size:24px;line-height:1.1;font-weight:700;">
+                ${value}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 14px 12px 14px;">
+              <div style="font-size:12px;line-height:1.4;color:${COLORS.textSoft};">
+                ${arrowHTML(change)} <span style="color:${COLORS.textMuted};">vs prior</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `;
+}
+
+function buildMetricStack(data) {
+  const revC = pct(data.revenue.total, data.comparison.revenue);
+  const ordC = pct(data.revenue.orders, data.comparison.orders);
+  const prevAov = data.comparison.orders ? data.comparison.revenue / data.comparison.orders : 0;
+  const aovC = pct(data.revenue.aov, prevAov);
+
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px 0;border-collapse:separate;border-spacing:0 8px;">
+      ${buildMetricCell('Revenue', fmt(data.revenue.total), revC, COLORS.brandDark)}
+      ${buildMetricCell('Orders', fmtN(data.revenue.orders), ordC, COLORS.brandInk)}
+      ${buildMetricCell('Avg Order Value', fmt(data.revenue.aov), aovC, '#6A7061')}
+    </table>
+  `;
+}
+
+function buildMiniStat(label, value, valueColor = COLORS.brandInk) {
+  return `
+    <td style="padding:0 0 8px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.cardBg};border:1px solid ${COLORS.border};">
         <tr>
-          <td style="padding:16px 16px 14px 16px;">
-            <div style="color:#a07f6a;font-size:10px;letter-spacing:1.7px;text-transform:uppercase;font-family:Arial,sans-serif;margin-bottom:8px;">
+          <td style="padding:10px 12px 4px 12px;">
+            <div style="color:${COLORS.textSoft};font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">
               ${label}
             </div>
-            <div style="color:#2f2a27;font-size:25px;line-height:1.12;font-weight:700;">
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 12px 10px 12px;">
+            <div style="color:${valueColor};font-size:15px;font-weight:700;line-height:1.3;">
               ${value}
-            </div>
-            <div style="font-size:12px;line-height:1.45;margin-top:8px;color:#7c6f67;">
-              ${arrowHTML(change)} <span style="color:#a1958d;">vs prior</span>
             </div>
           </td>
         </tr>
       </table>
-    </td>`;
+    </td>
+  `;
 }
 
-function buildMiniStat(label, value) {
+function buildMiniStatsRow(data) {
   return `
-    <td style="padding:0 8px 0 0;vertical-align:top;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f1ea;border:1px solid #eadfd6;border-radius:14px;">
-        <tr>
-          <td style="padding:12px 14px;">
-            <div style="color:#a07f6a;font-size:10px;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:4px;">
-              ${label}
-            </div>
-            <div style="color:#473d37;font-size:15px;font-weight:600;">
-              ${value}
-            </div>
-          </td>
-        </tr>
-      </table>
-    </td>`;
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px 0;border-collapse:separate;border-spacing:0 8px;">
+      <tr><td>${buildMiniStat('Shipping', fmt(data.revenue.shipping), COLORS.brandInk)}</td></tr>
+      <tr><td>${buildMiniStat('Discounts', '-' + fmt(data.revenue.discounts), COLORS.warning)}</td></tr>
+      <tr><td>${buildMiniStat('Items', fmtN(data.revenue.items), COLORS.brandInk)}</td></tr>
+    </table>
+  `;
+}
+
+function buildSectionHeader(stepNumber, title, subtitle = '') {
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 0 0;background:${COLORS.headerBg};border:1px solid ${COLORS.border};">
+      <tr>
+        <td style="padding:12px 14px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="vertical-align:middle;">
+                <span style="display:inline-block;border:2px solid ${COLORS.borderDark};color:${COLORS.brandDark};font-size:11px;font-weight:700;line-height:18px;width:18px;text-align:center;border-radius:4px;margin-right:8px;">${stepNumber}</span>
+                <span style="color:${COLORS.brandInk};font-size:11px;letter-spacing:1.8px;text-transform:uppercase;font-weight:700;">${title}</span>
+              </td>
+            </tr>
+            ${subtitle ? `
+            <tr>
+              <td style="padding-top:6px;color:${COLORS.textSoft};font-size:12px;line-height:1.5;">
+                ${subtitle}
+              </td>
+            </tr>` : ''}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
 }
 
 function buildMergedProductsSection(products) {
@@ -452,94 +537,58 @@ function buildMergedProductsSection(products) {
 
   const rows = products.map((p, i) => `
     <tr>
-      <td style="padding:12px 0;border-bottom:1px solid #efe7df;width:24px;color:#b29a8a;font-size:12px;vertical-align:top;">
+      <td style="padding:10px 0;border-bottom:1px solid ${COLORS.border};width:22px;color:${COLORS.textMuted};font-size:11px;vertical-align:top;">
         ${i + 1}
       </td>
-      <td style="padding:12px 10px 12px 0;border-bottom:1px solid #efe7df;vertical-align:top;">
-        <div style="color:#2f2a27;font-size:13px;font-weight:600;line-height:1.45;">${p.name}</div>
-        ${p.variant ? `<div style="color:#9b8b80;font-size:11px;line-height:1.4;margin-top:2px;">${p.variant}</div>` : ''}
+      <td style="padding:10px 8px 10px 0;border-bottom:1px solid ${COLORS.border};vertical-align:top;">
+        <div style="color:${COLORS.brandInk};font-size:13px;font-weight:700;line-height:1.4;">${p.name}</div>
+        ${p.variant ? `<div style="color:${COLORS.textMuted};font-size:11px;line-height:1.4;margin-top:2px;">${p.variant}</div>` : ''}
       </td>
-      <td style="padding:12px 8px;border-bottom:1px solid #efe7df;text-align:right;vertical-align:top;white-space:nowrap;">
-        <div style="color:#7b6d64;font-size:12px;line-height:1.4;">${fmtN(Math.round(p.yesterdayQty))} units</div>
-        <div style="color:#7a5c49;font-size:12px;font-weight:700;line-height:1.4;">${fmt0(p.yesterdayRevenue)}</div>
+      <td style="padding:10px 0 10px 8px;border-bottom:1px solid ${COLORS.border};text-align:right;vertical-align:top;white-space:nowrap;">
+        <div style="color:${COLORS.textSoft};font-size:11px;line-height:1.35;">${fmtN(Math.round(p.yesterdayQty))} units</div>
+        <div style="color:${COLORS.brandDark};font-size:12px;font-weight:700;line-height:1.35;">${fmt0(p.yesterdayRevenue)}</div>
       </td>
-      <td style="padding:12px 0 12px 8px;border-bottom:1px solid #efe7df;text-align:right;vertical-align:top;white-space:nowrap;">
-        <div style="color:#7b6d64;font-size:12px;line-height:1.4;">${fmtN(Math.round(p.ytdQty))} units</div>
-        <div style="color:#7a5c49;font-size:12px;font-weight:700;line-height:1.4;">${fmt0(p.ytdRevenue)}</div>
+    </tr>
+    <tr>
+      <td style="padding:0 0 10px 0;"></td>
+      <td colspan="2" style="padding:0 0 10px 0;border-bottom:1px solid ${COLORS.borderLight || COLORS.border};">
+        <div style="color:${COLORS.textSoft};font-size:10px;letter-spacing:1.3px;text-transform:uppercase;font-weight:700;margin-bottom:2px;">Year to Date</div>
+        <div style="color:${COLORS.textSoft};font-size:11px;line-height:1.35;">${fmtN(Math.round(p.ytdQty))} units</div>
+        <div style="color:${COLORS.brandInk};font-size:12px;font-weight:700;line-height:1.35;">${fmt0(p.ytdRevenue)}</div>
       </td>
     </tr>
   `).join('');
 
   return `
-    <tr>
-      <td colspan="3">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #eadfd6;border-radius:18px;">
-          <tr>
-            <td style="padding:16px 18px;">
-              <div style="color:#a07f6a;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:10px;">
-                Product Performance
-              </div>
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="padding:0 0 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;"></td>
-                  <td style="padding:0 10px 8px 0;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;">Product</td>
-                  <td style="padding:0 8px 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Yesterday</td>
-                  <td style="padding:0 0 8px 8px;color:#b29a8a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:right;">Year to Date</td>
-                </tr>
-                ${rows}
-              </table>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>`;
+    ${buildSectionHeader(3, 'Product Performance', 'Yesterday first, with year-to-date context below each item')}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.cardBg};border-left:1px solid ${COLORS.border};border-right:1px solid ${COLORS.border};border-bottom:1px solid ${COLORS.border};margin:0 0 18px 0;">
+      <tr>
+        <td style="padding:14px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            ${rows}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
 }
 
-function buildStoreSection(data) {
-  const revC = pct(data.revenue.total, data.comparison.revenue);
-  const ordC = pct(data.revenue.orders, data.comparison.orders);
-  const prevAov = data.comparison.orders ? data.comparison.revenue / data.comparison.orders : 0;
-  const aovC = pct(data.revenue.aov, prevAov);
-
+function buildStoreSection(data, stepBase = 1) {
   const dateRangeDisplay =
     data.startDate === data.endDate ? data.startDate : `${data.startDate} – ${data.endDate}`;
 
   return `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px 0;">
+    ${buildSectionHeader(stepBase, data.storeName, `${data.rangeLabel} · ${dateRangeDisplay}`)}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.panelBg};border-left:1px solid ${COLORS.border};border-right:1px solid ${COLORS.border};border-bottom:1px solid ${COLORS.border};margin:0 0 16px 0;">
       <tr>
-        <td style="padding:0 0 16px 0;">
-          <div style="color:#a8846a;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:6px;">
-            ${data.rangeLabel}
-          </div>
-          <div style="color:#2f2a27;font-size:22px;line-height:1.2;font-weight:700;">
-            ${data.storeName}
-          </div>
-          <div style="color:#9b8b80;font-size:12px;line-height:1.5;margin-top:4px;">
-            ${dateRangeDisplay}
-          </div>
+        <td style="padding:14px;">
+          ${buildMetricStack(data)}
+          ${buildMiniStatsRow(data)}
         </td>
       </tr>
-
-      <tr>
-        ${buildMetricCard('Revenue', fmt(data.revenue.total), revC)}
-        ${buildMetricCard('Orders', fmtN(data.revenue.orders), ordC)}
-        ${buildMetricCard('Avg Order Value', fmt(data.revenue.aov), aovC)}
-      </tr>
-
-      <tr>
-        <td colspan="3" style="padding:0 0 14px 0;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              ${buildMiniStat('Shipping', fmt(data.revenue.shipping))}
-              ${buildMiniStat('Discounts', '-' + fmt(data.revenue.discounts))}
-              ${buildMiniStat('Items', fmtN(data.revenue.items))}
-            </tr>
-          </table>
-        </td>
-      </tr>
-
-      ${buildMergedProductsSection(data.productsMerged)}
-    </table>`;
+    </table>
+    ${buildMergedProductsSection(data.productsMerged)}
+  `;
 }
 
 function buildEmailHTML(dataArr, blurb) {
@@ -548,36 +597,23 @@ function buildEmailHTML(dataArr, blurb) {
   const totalOrders = dataArr.reduce((s, d) => s + d.revenue.orders, 0);
 
   const dateStr = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
+    weekday: 'short',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
-  });
-
-  const divider = `
-    <tr>
-      <td style="padding:0 0 28px 0;">
-        <div style="height:1px;background:#ece3db;"></div>
-      </td>
-    </tr>`;
+  }).toUpperCase();
 
   const blurbHtml = blurb ? `
-    <tr>
-      <td style="padding:0 0 24px 0;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6efe8;border:1px solid #eadfd6;border-radius:18px;">
-          <tr>
-            <td style="padding:16px 18px;">
-              <div style="color:#a8846a;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:8px;">
-                Daily Insight
-              </div>
-              <div style="color:#473d37;font-size:14px;line-height:1.7;">
-                ${blurb}
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>` : '';
+    ${buildSectionHeader('•', 'Daily Insight')}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.cardBg};border-left:1px solid ${COLORS.border};border-right:1px solid ${COLORS.border};border-bottom:1px solid ${COLORS.border};margin:0 0 16px 0;">
+      <tr>
+        <td style="padding:14px 14px 16px 14px;color:${COLORS.brandInk};font-size:14px;line-height:1.7;">
+          ${blurb}
+        </td>
+      </tr>
+    </table>` : '';
+
+  const storesHtml = dataArr.map((d, i) => buildStoreSection(d, i + 1)).join('');
 
   return `<!DOCTYPE html>
 <html>
@@ -586,64 +622,50 @@ function buildEmailHTML(dataArr, blurb) {
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Lifelines Sales Report</title>
 </head>
-<body style="margin:0;padding:0;background:#f7f1eb;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f1eb;">
+<body style="margin:0;padding:0;background:${COLORS.pageBg};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.pageBg};">
     <tr>
-      <td align="center" style="padding:24px 12px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;">
+      <td align="center" style="padding:14px 8px 20px 8px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;">
 
           <tr>
             <td style="padding:0 0 14px 0;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8efe6;border:1px solid #eadfd6;border-radius:24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.panelBg};border:1px solid ${COLORS.border};">
                 <tr>
-                  <td style="padding:22px 22px 20px 22px;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="vertical-align:top;">
-                          <div style="color:#a8846a;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:8px;">
-                            Lifelines Daily Flow
-                          </div>
-                          <div style="color:#2f2a27;font-size:28px;line-height:1.15;font-weight:700;">
-                            Sales Report
-                          </div>
-                          <div style="color:#7e7068;font-size:13px;line-height:1.6;margin-top:6px;">
-                            ${dateStr}
-                          </div>
-                        </td>
-                        ${isCombined ? `
-                        <td align="right" style="vertical-align:top;">
-                          <div style="color:#7a5c49;font-size:28px;line-height:1;font-weight:700;">
-                            ${fmt(totalRev)}
-                          </div>
-                          <div style="color:#8d7d72;font-size:12px;line-height:1.5;margin-top:8px;">
-                            ${fmtN(totalOrders)} orders across ${dataArr.length} stores
-                          </div>
-                        </td>` : ''}
-                      </tr>
-                    </table>
+                  <td width="124" style="background:${COLORS.brand};padding:16px 12px;vertical-align:middle;">
+                    <div style="color:${COLORS.white};font-size:18px;line-height:1.05;font-weight:700;letter-spacing:2px;">
+                      LIFELINES
+                    </div>
+                    <div style="color:#DDE4D8;font-size:11px;line-height:1.3;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">
+                      Daily Ops
+                    </div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;border-left:1px solid ${COLORS.border};">
+                    <div style="color:${COLORS.brandInk};font-size:13px;line-height:1.2;font-weight:700;letter-spacing:2.4px;text-transform:uppercase;">
+                      Sales Report
+                    </div>
+                    <div style="color:${COLORS.textSoft};font-size:12px;line-height:1.5;letter-spacing:1px;text-transform:uppercase;margin-top:6px;">
+                      Shopify · Daily Store Performance
+                    </div>
+                    ${isCombined ? `
+                    <div style="color:${COLORS.brandDark};font-size:14px;line-height:1.5;font-weight:700;margin-top:10px;">
+                      ${fmt(totalRev)} · ${fmtN(totalOrders)} orders
+                    </div>` : ''}
+                    <div style="color:${COLORS.textMuted};font-size:12px;line-height:1.5;letter-spacing:1.2px;text-transform:uppercase;margin-top:6px;">
+                      ${dateStr}
+                    </div>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <tr>
-            <td style="padding:0;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffaf6;border:1px solid #eadfd6;border-radius:24px;">
-                <tr>
-                  <td style="padding:24px 20px;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      ${blurbHtml}
-                      ${dataArr.map(buildStoreSection).join(divider)}
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+          ${blurbHtml}
+
+          ${storesHtml}
 
           <tr>
-            <td style="text-align:center;padding:14px 0 0 0;color:#b5a59a;font-size:11px;line-height:1.5;">
+            <td style="text-align:center;padding:4px 0 0 0;color:${COLORS.textMuted};font-size:10px;line-height:1.5;letter-spacing:1.5px;text-transform:uppercase;">
               Lifelines Shopify Sales Reporter
             </td>
           </tr>
@@ -668,7 +690,7 @@ async function sendEmail(recipients, html, storeNames) {
   });
 
   await transporter.sendMail({
-    from: EMAIL.from ? `${EMAIL.from} <${EMAIL.user}>` : EMAIL.user,
+    from: EMAIL.from || EMAIL.user,
     to: recipients.join(', '),
     subject: `📊 Sales Report — ${storeNames}`,
     html,
