@@ -51,7 +51,7 @@ jobs:
           GMAIL_USER:              ${{ secrets.GMAIL_USER }}
           GMAIL_PASS:              ${{ secrets.GMAIL_PASS }}
           GMAIL_FROM:              ${{ secrets.GMAIL_FROM }}
-          RECIPIENTS_ALL:          ${{ secrets.RECIPIENTS_ALL }}
+          RECIPIENTS_ALL:          ${{ vars.RECIPIENTS_ALL }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
           DATE_RANGE:              ${{ github.event.inputs.date_range || 'yesterday' }}
         run: node send-report.js --schedule all
@@ -79,7 +79,7 @@ jobs:
           GMAIL_USER:        ${{ secrets.GMAIL_USER }}
           GMAIL_PASS:        ${{ secrets.GMAIL_PASS }}
           GMAIL_FROM:        ${{ secrets.GMAIL_FROM }}
-          RECIPIENTS_DTC:    ${{ secrets.RECIPIENTS_DTC }}
+          RECIPIENTS_DTC:    ${{ vars.RECIPIENTS_DTC }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DATE_RANGE:        ${{ github.event.inputs.date_range || 'yesterday' }}
         run: node send-report.js --schedule dtc
