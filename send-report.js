@@ -195,8 +195,10 @@ function getYtdRange() {
 async function fetchAllOrders(store, token, params) {
   let orders = [];
   let nextUrl = `https://${store}/admin/api/2024-01/orders.json${params}`;
+  let pageCount = 0;
 
   while (nextUrl) {
+    pageCount++;
     const res = await fetch(nextUrl, {
       headers: {
         'X-Shopify-Access-Token': token,
@@ -209,7 +211,10 @@ async function fetchAllOrders(store, token, params) {
     }
 
     const data = await res.json();
-    orders = orders.concat(data.orders || []);
+    const page = data.orders || [];
+    orders = orders.concat(page);
+
+    console.log(`  [fetch] page ${pageCount}: ${page.length} orders (running total: ${orders.length})`);
 
     const link = res.headers.get('link') || '';
     const match = link.match(/<([^>]+)>;\s*rel="next"/);
@@ -230,7 +235,10 @@ function buildCreatedAtParams(range) {
 }
 
 async function fetchOrdersForRange(store, token, range) {
-  return fetchAllOrders(store, token, buildCreatedAtParams(range));
+  console.log(`Fetching orders for range: ${range.startIso} → ${range.endIso}`);
+  const orders = await fetchAllOrders(store, token, buildCreatedAtParams(range));
+  console.log(`  → Total orders fetched: ${orders.length}`);
+  return orders;
 }
 
 // ── Aggregation helpers ───────────────────────────────────────────────────────
@@ -331,23 +339,44 @@ async function fetchStoreData(storeObj, dateRange) {
   const yesterdayRange = getYesterdayRange();
   const ytdRange = getYtdRange();
 
+  const isCurrentRangeYesterday =
+    currentRange.startKey === yesterdayRange.startKey &&
+    currentRange.endKey === yesterdayRange.endKey;
+
+  console.log(`\n── ${name} ──`);
+  console.log(`Current range:  ${currentRange.startKey} → ${currentRange.endKey}`);
+  console.log(`Previous range: ${previousRange.startKey} → ${previousRange.endKey}`);
+  console.log(`Yesterday range: ${yesterdayRange.startKey} → ${yesterdayRange.endKey}`);
+  console.log(`YTD range: ${ytdRange.startKey} → ${ytdRange.endKey}`);
+  console.log(`Is current range == yesterday: ${isCurrentRangeYesterday}`);
+
   const [currentOrders, previousOrders, ytdOrders] = await Promise.all([
     fetchOrdersForRange(store, token, currentRange),
     fetchOrdersForRange(store, token, previousRange),
-    currentRange.startKey === yesterdayRange.startKey && currentRange.endKey === yesterdayRange.endKey
+    isCurrentRangeYesterday
       ? Promise.resolve(null)
       : fetchOrdersForRange(store, token, ytdRange),
   ]);
 
-  const yesterdayOrders =
-    currentRange.startKey === yesterdayRange.startKey && currentRange.endKey === yesterdayRange.endKey
-      ? currentOrders
-      : await fetchOrdersForRange(store, token, yesterdayRange);
+  const yesterdayOrders = isCurrentRangeYesterday
+    ? currentOrders
+    : await fetchOrdersForRange(store, token, yesterdayRange);
 
   const resolvedYtdOrders = ytdOrders || await fetchOrdersForRange(store, token, ytdRange);
 
+  console.log(`\n${name} order counts:`);
+  console.log(`  currentOrders:   ${currentOrders.length}`);
+  console.log(`  previousOrders:  ${previousOrders.length}`);
+  console.log(`  yesterdayOrders: ${yesterdayOrders.length}`);
+  console.log(`  ytdOrders:       ${resolvedYtdOrders.length}`);
+
   const revenue = aggregateRevenueMetrics(currentOrders);
   const comparisonMetrics = aggregateRevenueMetrics(previousOrders);
+
+  console.log(`\n${name} aggregated metrics:`);
+  console.log(`  revenue.orders: ${revenue.orders}`);
+  console.log(`  revenue.total:  ${revenue.total.toFixed(2)}`);
+  console.log(`  revenue.aov:    ${revenue.aov.toFixed(2)}`);
 
   const yesterdayProducts = aggregateProducts(yesterdayOrders);
   const ytdProducts = aggregateProducts(resolvedYtdOrders);
@@ -723,19 +752,20 @@ async function main() {
     schedCfg.stores.map(s => fetchStoreData(s, DATE_RANGE))
   );
 
-  console.log(
-    `Fetched data: ${dataArr.map(d => `${d.storeName} — ${d.revenue.orders} orders, ${fmt(d.revenue.total)}`).join(' | ')}`
-  );
+  console.log('\n── Final summary ──');
+  dataArr.forEach(d => {
+    console.log(`${d.storeName}: ${d.revenue.orders} orders, $${d.revenue.total.toFixed(2)} revenue, AOV $${d.revenue.aov.toFixed(2)}`);
+  });
 
   const blurb = await generateBlurb(dataArr);
-  if (blurb) console.log(`AI blurb: ${blurb}`);
+  if (blurb) console.log(`\nAI blurb: ${blurb}`);
 
   const html = buildEmailHTML(dataArr, blurb);
   const storeNames = dataArr.map(d => d.storeName).join(', ');
 
   await sendEmail(schedCfg.recipients, html, storeNames);
 
-  console.log(`✓ Email sent to: ${schedCfg.recipients.join(', ')}`);
+  console.log(`\n✓ Email sent to: ${schedCfg.recipients.join(', ')}`);
 }
 
 main().catch(err => {
