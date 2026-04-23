@@ -48,6 +48,12 @@ const SCHEDULE_CONFIG = {
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const DATE_RANGE = process.env.DATE_RANGE || 'yesterday'; // yesterday | 7days | 30days | today
 
+// ── Shopify resilience settings ───────────────────────────────────────────────
+const SHOPIFY_MAX_RETRIES = Number(process.env.SHOPIFY_MAX_RETRIES || 5);
+const SHOPIFY_PAGE_DELAY_MS = Number(process.env.SHOPIFY_PAGE_DELAY_MS || 150);
+const SHOPIFY_RETRY_BASE_MS = Number(process.env.SHOPIFY_RETRY_BASE_MS || 1000);
+const FAIL_ON_STORE_ERROR = String(process.env.FAIL_ON_STORE_ERROR || 'false').toLowerCase() === 'true';
+
 // ── Brand / UI colors ─────────────────────────────────────────────────────────
 const COLORS = {
   pageBg: '#ECEDE3',
@@ -185,10 +191,91 @@ function getYesterdayRange() {
   return makeRange(yKey, yKey, 'yesterday');
 }
 
-function getYtdRange() {
+function getYtdRange(dateRange) {
   const todayKey = getEasternTodayKey();
   const year = todayKey.slice(0, 4);
-  return makeRange(`${year}-01-01`, todayKey, 'ytd');
+  const endKey = dateRange === 'yesterday' ? shiftDayKey(todayKey, -1) : todayKey;
+  return makeRange(`${year}-01-01`, endKey, 'ytd');
+}
+
+// ── Utility helpers ───────────────────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetriableStatus(status) {
+  return [429, 500, 502, 503, 504].includes(status);
+}
+
+function getRetryDelayMs(attempt, retryAfterHeader) {
+  const retryAfterSeconds = Number(retryAfterHeader);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return retryAfterSeconds * 1000;
+  }
+
+  const exp = Math.min(SHOPIFY_RETRY_BASE_MS * (2 ** attempt), 30000);
+  const jitter = Math.floor(Math.random() * 500);
+  return exp + jitter;
+}
+
+async function fetchShopifyJson(url, token, context = '') {
+  let lastErr;
+
+  for (let attempt = 0; attempt <= SHOPIFY_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const raw = await res.text();
+
+      if (!res.ok) {
+        const snippet = raw.slice(0, 300).replace(/\s+/g, ' ');
+        if (isRetriableStatus(res.status) && attempt < SHOPIFY_MAX_RETRIES) {
+          const delayMs = getRetryDelayMs(attempt, res.headers.get('retry-after'));
+          console.warn(
+            `  [retry] ${context} -> HTTP ${res.status} on attempt ${attempt + 1}/${SHOPIFY_MAX_RETRIES + 1}; retrying in ${delayMs}ms`
+          );
+          await sleep(delayMs);
+          continue;
+        }
+
+        throw new Error(`Shopify API ${res.status}: ${snippet}`);
+      }
+
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (err) {
+        const snippet = raw.slice(0, 300).replace(/\s+/g, ' ');
+        if (attempt < SHOPIFY_MAX_RETRIES) {
+          const delayMs = getRetryDelayMs(attempt, null);
+          console.warn(
+            `  [retry] ${context} -> non-JSON response on attempt ${attempt + 1}/${SHOPIFY_MAX_RETRIES + 1}; retrying in ${delayMs}ms`
+          );
+          await sleep(delayMs);
+          continue;
+        }
+        throw new Error(`Shopify response was not valid JSON: ${snippet}`);
+      }
+
+      return { res, data };
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= SHOPIFY_MAX_RETRIES) break;
+
+      const delayMs = getRetryDelayMs(attempt, null);
+      console.warn(
+        `  [retry] ${context} -> ${err.message} on attempt ${attempt + 1}/${SHOPIFY_MAX_RETRIES + 1}; retrying in ${delayMs}ms`
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastErr;
 }
 
 // ── Shopify fetch with pagination ─────────────────────────────────────────────
@@ -199,18 +286,13 @@ async function fetchAllOrders(store, token, params) {
 
   while (nextUrl) {
     pageCount++;
-    const res = await fetch(nextUrl, {
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json',
-      },
-    });
 
-    if (!res.ok) {
-      throw new Error(`Shopify API ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    }
+    const { res, data } = await fetchShopifyJson(
+      nextUrl,
+      token,
+      `${store} page ${pageCount}`
+    );
 
-    const data = await res.json();
     const page = data.orders || [];
     orders = orders.concat(page);
 
@@ -219,6 +301,10 @@ async function fetchAllOrders(store, token, params) {
     const link = res.headers.get('link') || '';
     const match = link.match(/<([^>]+)>;\s*rel="next"/);
     nextUrl = match ? match[1] : null;
+
+    if (nextUrl && SHOPIFY_PAGE_DELAY_MS > 0) {
+      await sleep(SHOPIFY_PAGE_DELAY_MS);
+    }
   }
 
   return orders;
@@ -337,7 +423,7 @@ async function fetchStoreData(storeObj, dateRange) {
   const currentRange = resolveCurrentRange(dateRange);
   const previousRange = derivePreviousRange(currentRange);
   const yesterdayRange = getYesterdayRange();
-  const ytdRange = getYtdRange();
+  const ytdRange = getYtdRange(dateRange);
 
   const isCurrentRangeYesterday =
     currentRange.startKey === yesterdayRange.startKey &&
@@ -383,6 +469,7 @@ async function fetchStoreData(storeObj, dateRange) {
   const mergedProducts = mergeProductWindows(yesterdayProducts, ytdProducts);
 
   return {
+    ok: true,
     storeName: name,
     storeUrl: store,
     dateRange,
@@ -627,7 +714,20 @@ function buildStoreSection(data, stepBase = 1) {
   `;
 }
 
-function buildEmailHTML(dataArr, blurb) {
+function buildErrorSection(errObj, stepBase = '!') {
+  return `
+    ${buildSectionHeader(stepBase, errObj.storeName, 'Store fetch failed')}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.panelBg};border-left:1px solid ${COLORS.border};border-right:1px solid ${COLORS.border};border-bottom:1px solid ${COLORS.border};margin:0 0 16px 0;">
+      <tr>
+        <td style="padding:14px;color:${COLORS.negative};font-size:13px;line-height:1.6;">
+          ${errObj.errorMessage}
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+function buildEmailHTML(dataArr, blurb, errorArr = []) {
   const isCombined = dataArr.length > 1;
   const totalRev = dataArr.reduce((s, d) => s + d.revenue.total, 0);
   const totalOrders = dataArr.reduce((s, d) => s + d.revenue.orders, 0);
@@ -650,6 +750,7 @@ function buildEmailHTML(dataArr, blurb) {
     </table>` : '';
 
   const storesHtml = dataArr.map((d, i) => buildStoreSection(d, i + 1)).join('');
+  const errorsHtml = errorArr.map((e, i) => buildErrorSection(e, `E${i + 1}`)).join('');
 
   return `<!DOCTYPE html>
 <html>
@@ -697,8 +798,8 @@ function buildEmailHTML(dataArr, blurb) {
           </tr>
 
           ${blurbHtml}
-
           ${storesHtml}
+          ${errorsHtml}
 
           <tr>
             <td style="text-align:center;padding:4px 0 0 0;color:${COLORS.textMuted};font-size:10px;line-height:1.5;letter-spacing:1.5px;text-transform:uppercase;">
@@ -748,22 +849,62 @@ async function main() {
 
   console.log(`Running schedule: ${SCHEDULE} | stores: ${schedCfg.stores.map(s => s.name).join(', ')} | range: ${DATE_RANGE}`);
 
-  const dataArr = await Promise.all(
+  const results = await Promise.allSettled(
     schedCfg.stores.map(s => fetchStoreData(s, DATE_RANGE))
   );
+
+  const dataArr = [];
+  const errorArr = [];
+
+  results.forEach((result, idx) => {
+    const storeName = schedCfg.stores[idx].name;
+
+    if (result.status === 'fulfilled') {
+      dataArr.push(result.value);
+    } else {
+      const errorMessage = result.reason?.message || String(result.reason);
+      console.error(`\nStore failed: ${storeName}`);
+      console.error(errorMessage);
+
+      errorArr.push({
+        storeName,
+        errorMessage,
+      });
+    }
+  });
+
+  if (!dataArr.length) {
+    console.error('All store fetches failed.');
+    process.exit(1);
+  }
+
+  if (errorArr.length && FAIL_ON_STORE_ERROR) {
+    console.error('One or more stores failed and FAIL_ON_STORE_ERROR=true.');
+    process.exit(1);
+  }
 
   console.log('\n── Final summary ──');
   dataArr.forEach(d => {
     console.log(`${d.storeName}: ${d.revenue.orders} orders, $${d.revenue.total.toFixed(2)} revenue, AOV $${d.revenue.aov.toFixed(2)}`);
   });
 
+  if (errorArr.length) {
+    console.log('\n── Store errors ──');
+    errorArr.forEach(e => {
+      console.log(`${e.storeName}: ${e.errorMessage}`);
+    });
+  }
+
   const blurb = await generateBlurb(dataArr);
   if (blurb) console.log(`\nAI blurb: ${blurb}`);
 
-  const html = buildEmailHTML(dataArr, blurb);
-  const storeNames = dataArr.map(d => d.storeName).join(', ');
+  const html = buildEmailHTML(dataArr, blurb, errorArr);
+  const subjectStores = [
+    ...dataArr.map(d => d.storeName),
+    ...errorArr.map(e => `${e.storeName} (failed)`),
+  ].join(', ');
 
-  await sendEmail(schedCfg.recipients, html, storeNames);
+  await sendEmail(schedCfg.recipients, html, subjectStores);
 
   console.log(`\n✓ Email sent to: ${schedCfg.recipients.join(', ')}`);
 }
