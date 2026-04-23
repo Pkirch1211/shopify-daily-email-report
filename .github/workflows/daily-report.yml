@@ -2,9 +2,7 @@ name: Daily Sales Report
 
 on:
   schedule:
-    # 08:30 UTC = 03:30 EST (UTC-5) — runs every day
     - cron: '30 8 * * *'
-  # Allow manual trigger from GitHub Actions UI
   workflow_dispatch:
     inputs:
       schedule:
@@ -15,6 +13,7 @@ on:
         options:
           - all
           - dtc
+          - wholesale
       date_range:
         description: 'Date range'
         required: true
@@ -54,6 +53,10 @@ jobs:
           RECIPIENTS_ALL:          ${{ vars.RECIPIENTS_ALL }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
           DATE_RANGE:              ${{ github.event.inputs.date_range || 'yesterday' }}
+          SHOPIFY_MAX_RETRIES:     ${{ vars.SHOPIFY_MAX_RETRIES }}
+          SHOPIFY_PAGE_DELAY_MS:   ${{ vars.SHOPIFY_PAGE_DELAY_MS }}
+          SHOPIFY_RETRY_BASE_MS:   ${{ vars.SHOPIFY_RETRY_BASE_MS }}
+          FAIL_ON_STORE_ERROR:     ${{ vars.FAIL_ON_STORE_ERROR }}
         run: node send-report.js --schedule all
 
   send-dtc-only:
@@ -74,12 +77,48 @@ jobs:
 
       - name: Send DTC report
         env:
-          SHOPIFY_DTC_STORE: ${{ secrets.SHOPIFY_DTC_STORE }}
-          SHOPIFY_DTC_TOKEN: ${{ secrets.SHOPIFY_DTC_TOKEN }}
-          GMAIL_USER:        ${{ secrets.GMAIL_USER }}
-          GMAIL_PASS:        ${{ secrets.GMAIL_PASS }}
-          GMAIL_FROM:        ${{ secrets.GMAIL_FROM }}
-          RECIPIENTS_DTC:    ${{ vars.RECIPIENTS_DTC }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DATE_RANGE:        ${{ github.event.inputs.date_range || 'yesterday' }}
+          SHOPIFY_DTC_STORE:       ${{ secrets.SHOPIFY_DTC_STORE }}
+          SHOPIFY_DTC_TOKEN:       ${{ secrets.SHOPIFY_DTC_TOKEN }}
+          GMAIL_USER:              ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS:              ${{ secrets.GMAIL_PASS }}
+          GMAIL_FROM:              ${{ secrets.GMAIL_FROM }}
+          RECIPIENTS_DTC:          ${{ vars.RECIPIENTS_DTC }}
+          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          DATE_RANGE:              ${{ github.event.inputs.date_range || 'yesterday' }}
+          SHOPIFY_MAX_RETRIES:     ${{ vars.SHOPIFY_MAX_RETRIES }}
+          SHOPIFY_PAGE_DELAY_MS:   ${{ vars.SHOPIFY_PAGE_DELAY_MS }}
+          SHOPIFY_RETRY_BASE_MS:   ${{ vars.SHOPIFY_RETRY_BASE_MS }}
+          FAIL_ON_STORE_ERROR:     ${{ vars.FAIL_ON_STORE_ERROR }}
         run: node send-report.js --schedule dtc
+
+  send-wholesale-only:
+    name: Wholesale Only Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.schedule == 'wholesale'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Send Wholesale report
+        env:
+          SHOPIFY_WHOLESALE_STORE: ${{ secrets.SHOPIFY_WHOLESALE_STORE }}
+          SHOPIFY_WHOLESALE_TOKEN: ${{ secrets.SHOPIFY_WHOLESALE_TOKEN }}
+          GMAIL_USER:              ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS:              ${{ secrets.GMAIL_PASS }}
+          GMAIL_FROM:              ${{ secrets.GMAIL_FROM }}
+          RECIPIENTS_ALL:          ${{ vars.RECIPIENTS_ALL }}
+          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          DATE_RANGE:              ${{ github.event.inputs.date_range || 'yesterday' }}
+          SHOPIFY_MAX_RETRIES:     ${{ vars.SHOPIFY_MAX_RETRIES }}
+          SHOPIFY_PAGE_DELAY_MS:   ${{ vars.SHOPIFY_PAGE_DELAY_MS }}
+          SHOPIFY_RETRY_BASE_MS:   ${{ vars.SHOPIFY_RETRY_BASE_MS }}
+          FAIL_ON_STORE_ERROR:     ${{ vars.FAIL_ON_STORE_ERROR }}
+        run: node send-report.js --schedule wholesale
